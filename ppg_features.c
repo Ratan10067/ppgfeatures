@@ -554,85 +554,196 @@ double slope_int(int x1, double y1, int x2, double y2)
     return (y2 - y1) / (double)(x2 - x1);
 }
 
-double *compute_more_ppg_features(const double *ppg_bp, const double *ppg_bp_inv, size_t N)
+// double *compute_more_ppg_features(const double *ppg_bp, const double *ppg_bp_inv, size_t N)
+// {
+//     // 1) Detect peaks on ppg_bp:
+//     size_t npeaks = 0;
+//     int *peaks = detect_peaks(ppg_bp, N, 50, &npeaks);
+//     // 2) Detect troughs on ppg_bp_inv:
+//     size_t nonsets = 0;
+//     int *onsets = detect_troughs(ppg_bp_inv, N, 50, &nonsets);
+
+//     // Initialize accumulators:
+//     double H1 = 0.0, T1 = 0.0, T2 = 0.0;
+//     double P1_sum = 0.0, P2_sum = 0.0;
+//     double S1 = 0.0, S2 = 0.0;
+
+//     size_t ind = 0;
+//     // For each pair of onsets[ i ], onsets[ i+1 ], find first peak >= onsets[i]
+//     for (size_t i = 0; i + 1 < nonsets; i++)
+//     {
+//         int first_onset = onsets[i];
+//         int second_onset = onsets[i + 1];
+//         // Move ind so that peaks[ind] >= first_onset
+//         while (ind < npeaks && peaks[ind] < first_onset)
+//             ind++;
+//         if (ind < npeaks)
+//         {
+//             int sys_peak = peaks[ind];
+//             if (sys_peak >= second_onset)
+//             {
+//                 // If the first peak is beyond second_onset, there's no peak in [first,second)
+//                 continue;
+//             }
+//             // Compute:
+//             double t1 = (double)(sys_peak - first_onset);
+//             double t2 = (double)(second_onset - sys_peak);
+//             double h1 = ppg_bp[sys_peak];
+//             double p1 = slope_int(first_onset, ppg_bp[first_onset], sys_peak, ppg_bp[sys_peak]);
+//             double p2 = slope_int(sys_peak, ppg_bp[sys_peak], second_onset, ppg_bp[second_onset]);
+//             double s1 = 0.5 * t1 * h1;
+//             double s2 = 0.5 * t2 * h1;
+//             H1 += h1;
+//             T1 += t1;
+//             T2 += t2;
+//             P1_sum += p1;
+//             P2_sum += p2;
+//             S1 += s1;
+//             S2 += s2;
+//         }
+//     }
+
+//     double Tsum = T1 + T2;
+//     double Tdiff = T1 - T2;
+//     double Tratio = (T2 != 0.0) ? (T1 / T2) : 0.0;
+//     double Ssum = S1 + S2;
+//     double s1_div_s = (Ssum != 0.0) ? (S1 / Ssum) : 0.0;
+//     double s2_div_s = (Ssum != 0.0) ? (S2 / Ssum) : 0.0;
+//     double s_ratio = (S2 != 0.0) ? (S1 / S2) : 0.0;
+
+//     double *out = (double *)malloc(sizeof(double) * 15);
+//     if (!out)
+//     {
+//         fprintf(stderr, "Error: malloc failed\n");
+//         exit(1);
+//     }
+//     out[0] = H1;
+//     out[1] = T1;
+//     out[2] = T2;
+//     out[3] = Tsum;
+//     out[4] = Tdiff;
+//     out[5] = Tratio;
+//     out[6] = S1;
+//     out[7] = S2;
+//     out[8] = Ssum;
+//     out[9] = s1_div_s;
+//     out[10] = s2_div_s;
+//     out[11] = s_ratio;
+//     out[12] = P1_sum;
+//     out[13] = P2_sum;
+//     free(onsets);
+//     free(peaks);
+//     return out;
+// }
+double *compute_more_ppg_features(const double *ppg_bp,
+                                  const double *ppg_bp_inv,
+                                  size_t N)
 {
-    // 1) Detect peaks on ppg_bp:
-    size_t npeaks = 0;
-    int *peaks = detect_peaks(ppg_bp, N, 50, &npeaks);
-    // 2) Detect troughs on ppg_bp_inv:
-    size_t nonsets = 0;
+    // 1) Detect peaks & troughs *both* on the inverted signal:
+    size_t npeaks = 0, nonsets = 0;
+    int *peaks = detect_peaks(ppg_bp_inv, N, 50, &npeaks); // <<< FIX: use ppg_bp_inv
     int *onsets = detect_troughs(ppg_bp_inv, N, 50, &nonsets);
 
-    // Initialize accumulators:
-    double H1 = 0.0, T1 = 0.0, T2 = 0.0;
-    double P1_sum = 0.0, P2_sum = 0.0;
-    double S1 = 0.0, S2 = 0.0;
+    // Debug
+    fprintf(stderr, "DEBUG: npeaks=%zu, nonsets=%zu\n", npeaks, nonsets);
 
-    size_t ind = 0;
-    // For each pair of onsets[ i ], onsets[ i+1 ], find first peak >= onsets[i]
-    for (size_t i = 0; i + 1 < nonsets; i++)
+    // 2) Accumulators
+    double H1 = 0, T1 = 0, T2 = 0;
+    double P1_sum = 0, P2_sum = 0;
+    double S1 = 0, S2 = 0;
+
+    // 3) Loop over each beat window
+    for (size_t i = 0; i + 1 < nonsets; ++i)
     {
-        int first_onset = onsets[i];
-        int second_onset = onsets[i + 1];
-        // Move ind so that peaks[ind] >= first_onset
-        while (ind < npeaks && peaks[ind] < first_onset)
-            ind++;
-        if (ind < npeaks)
+        int o1 = onsets[i];
+        int o2 = onsets[i + 1];
+
+        // 4) Find the highest‐amplitude peak in [o1, o2)
+        double best_amp = -INFINITY;
+        int best_peak = -1;
+        for (size_t k = 0; k < npeaks; ++k)
         {
-            int sys_peak = peaks[ind];
-            if (sys_peak >= second_onset)
-            {
-                // If the first peak is beyond second_onset, there's no peak in [first,second)
+            int p = peaks[k];
+            if (p < o1)
                 continue;
+            if (p >= o2)
+                break;                  // peaks[] sorted ascending
+            double amp = ppg_bp_inv[p]; // <<< compare on inverted PPG
+            if (amp > best_amp)
+            {
+                best_amp = amp;
+                best_peak = p;
             }
-            // Compute:
-            double t1 = (double)(sys_peak - first_onset);
-            double t2 = (double)(second_onset - sys_peak);
-            double h1 = ppg_bp[sys_peak];
-            double p1 = slope_int(first_onset, ppg_bp[first_onset], sys_peak, ppg_bp[sys_peak]);
-            double p2 = slope_int(sys_peak, ppg_bp[sys_peak], second_onset, ppg_bp[second_onset]);
-            double s1 = 0.5 * t1 * h1;
-            double s2 = 0.5 * t2 * h1;
-            H1 += h1;
-            T1 += t1;
-            T2 += t2;
-            P1_sum += p1;
-            P2_sum += p2;
-            S1 += s1;
-            S2 += s2;
         }
+        if (best_peak < 0)
+            continue; // no peak in this beat
+
+        // 5) Skip zero‐length / boundary peaks
+        if (best_peak == o1 || best_peak == o2)
+            continue;
+
+        // 6) Compute metrics on the inverted PPG
+        double t1 = (double)(best_peak - o1);
+        double t2 = (double)(o2 - best_peak);
+        double h1 = ppg_bp_inv[best_peak];
+
+        double p1 = (ppg_bp_inv[best_peak] - ppg_bp_inv[o1]) / t1;
+        double p2 = (ppg_bp_inv[o2] - ppg_bp_inv[best_peak]) / t2;
+
+        double s1 = 0.5 * t1 * h1;
+        double s2 = 0.5 * t2 * h1;
+
+        // 7) Accumulate
+        H1 += h1;
+        T1 += t1;
+        T2 += t2;
+        P1_sum += p1;
+        P2_sum += p2;
+        S1 += s1;
+        S2 += s2;
+
+        // (Optional debug)
+        // fprintf(stderr, "beat %zu: t1=%.3f t2=%.3f h1=%.3f\n", i, t1, t2, h1);
     }
 
+    // 8) Final ratios
     double Tsum = T1 + T2;
     double Tdiff = T1 - T2;
-    double Tratio = (T2 != 0.0) ? (T1 / T2) : 0.0;
+    double Tratio = (T2 != 0.0 ? T1 / T2 : 0.0);
     double Ssum = S1 + S2;
-    double s1_div_s = (Ssum != 0.0) ? (S1 / Ssum) : 0.0;
-    double s2_div_s = (Ssum != 0.0) ? (S2 / Ssum) : 0.0;
-    double s_ratio = (S2 != 0.0) ? (S1 / S2) : 0.0;
+    double s1_div_s = (Ssum != 0.0 ? S1 / Ssum : 0.0);
+    double s2_div_s = (Ssum != 0.0 ? S2 / Ssum : 0.0);
+    double s_ratio = (S2 != 0.0 ? S1 / S2 : 0.0);
 
-    double *out = (double *)malloc(sizeof(double) * 15);
+    // 9) Allocate exactly 14 outputs
+    double *out = malloc(sizeof(double) * 14);
     if (!out)
     {
-        fprintf(stderr, "Error: malloc failed\n");
+        fprintf(stderr, "Error: malloc failed in more_ppg_features\n");
         exit(1);
     }
+
+    // 10) Fill feature vector
     out[0] = H1;
     out[1] = T1;
     out[2] = T2;
     out[3] = Tsum;
     out[4] = Tdiff;
     out[5] = Tratio;
+
     out[6] = S1;
     out[7] = S2;
     out[8] = Ssum;
     out[9] = s1_div_s;
     out[10] = s2_div_s;
     out[11] = s_ratio;
+
     out[12] = P1_sum;
     out[13] = P2_sum;
-    free(onsets);
+
+    // 11) Cleanup
     free(peaks);
+    free(onsets);
     return out;
 }
 

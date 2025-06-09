@@ -328,42 +328,6 @@ void fft_rec(double *real, double *imag, size_t N)
     free(r_odd);
     free(i_odd);
 }
-// double *compute_fft_magnitude(const double *x, size_t N, size_t *out_len)
-// {
-//     // Find next power of 2
-//     size_t M = next_pow2(N);
-//     // Allocate real/imag arrays of length M, initialize with zeros
-//     double *r = (double *)calloc(M, sizeof(double));
-//     double *im = (double *)calloc(M, sizeof(double));
-//     if (!r || !im)
-//     {
-//         fprintf(stderr, "Error: calloc failed in FFT prep\n");
-//         exit(1);
-//     }
-//     // Copy x into r[0..N-1]
-//     for (size_t i = 0; i < N; i++)
-//     {
-//         r[i] = x[i];
-//     }
-//     // FFT in‐place on (r,im)
-//     fft_rec(r, im, M);
-//     // We want one‐sided magnitude: indices 0..M/2-1
-//     size_t Nout = M / 2;
-//     double *mag = (double *)malloc(sizeof(double) * Nout);
-//     if (!mag)
-//     {
-//         fprintf(stderr, "Error: malloc failed\n");
-//         exit(1);
-//     }
-//     for (size_t k = 0; k < Nout; k++)
-//     {
-//         mag[k] = sqrt(r[k] * r[k] + im[k] * im[k]);
-//     }
-//     free(r);
-//     free(im);
-//     *out_len = Nout;
-//     return mag;
-// }
 double *compute_fft_magnitude(const double *x, size_t N, size_t *out_len)
 {
     size_t Nhalf = N / 2;
@@ -581,87 +545,6 @@ double slope_int(int x1, double y1, int x2, double y2)
     return (y2 - y1) / (double)(x2 - x1);
 }
 
-// double *compute_more_ppg_features(const double *ppg_bp, const double *ppg_bp_inv, size_t N)
-// {
-//     // 1) Detect peaks on ppg_bp:
-//     size_t npeaks = 0;
-//     int *peaks = detect_peaks(ppg_bp, N, 50, &npeaks);
-//     // 2) Detect troughs on ppg_bp_inv:
-//     size_t nonsets = 0;
-//     int *onsets = detect_troughs(ppg_bp_inv, N, 50, &nonsets);
-
-//     // Initialize accumulators:
-//     double H1 = 0.0, T1 = 0.0, T2 = 0.0;
-//     double P1_sum = 0.0, P2_sum = 0.0;
-//     double S1 = 0.0, S2 = 0.0;
-
-//     size_t ind = 0;
-//     // For each pair of onsets[ i ], onsets[ i+1 ], find first peak >= onsets[i]
-//     for (size_t i = 0; i + 1 < nonsets; i++)
-//     {
-//         int first_onset = onsets[i];
-//         int second_onset = onsets[i + 1];
-//         // Move ind so that peaks[ind] >= first_onset
-//         while (ind < npeaks && peaks[ind] < first_onset)
-//             ind++;
-//         if (ind < npeaks)
-//         {
-//             int sys_peak = peaks[ind];
-//             if (sys_peak >= second_onset)
-//             {
-//                 // If the first peak is beyond second_onset, there's no peak in [first,second)
-//                 continue;
-//             }
-//             // Compute:
-//             double t1 = (double)(sys_peak - first_onset);
-//             double t2 = (double)(second_onset - sys_peak);
-//             double h1 = ppg_bp[sys_peak];
-//             double p1 = slope_int(first_onset, ppg_bp[first_onset], sys_peak, ppg_bp[sys_peak]);
-//             double p2 = slope_int(sys_peak, ppg_bp[sys_peak], second_onset, ppg_bp[second_onset]);
-//             double s1 = 0.5 * t1 * h1;
-//             double s2 = 0.5 * t2 * h1;
-//             H1 += h1;
-//             T1 += t1;
-//             T2 += t2;
-//             P1_sum += p1;
-//             P2_sum += p2;
-//             S1 += s1;
-//             S2 += s2;
-//         }
-//     }
-
-//     double Tsum = T1 + T2;
-//     double Tdiff = T1 - T2;
-//     double Tratio = (T2 != 0.0) ? (T1 / T2) : 0.0;
-//     double Ssum = S1 + S2;
-//     double s1_div_s = (Ssum != 0.0) ? (S1 / Ssum) : 0.0;
-//     double s2_div_s = (Ssum != 0.0) ? (S2 / Ssum) : 0.0;
-//     double s_ratio = (S2 != 0.0) ? (S1 / S2) : 0.0;
-
-//     double *out = (double *)malloc(sizeof(double) * 15);
-//     if (!out)
-//     {
-//         fprintf(stderr, "Error: malloc failed\n");
-//         exit(1);
-//     }
-//     out[0] = H1;
-//     out[1] = T1;
-//     out[2] = T2;
-//     out[3] = Tsum;
-//     out[4] = Tdiff;
-//     out[5] = Tratio;
-//     out[6] = S1;
-//     out[7] = S2;
-//     out[8] = Ssum;
-//     out[9] = s1_div_s;
-//     out[10] = s2_div_s;
-//     out[11] = s_ratio;
-//     out[12] = P1_sum;
-//     out[13] = P2_sum;
-//     free(onsets);
-//     free(peaks);
-//     return out;
-// }
 double *compute_more_ppg_features(const double *ppg_bp,
                                   const double *ppg_bp_inv,
                                   size_t N)

@@ -328,40 +328,67 @@ void fft_rec(double *real, double *imag, size_t N)
     free(r_odd);
     free(i_odd);
 }
+// double *compute_fft_magnitude(const double *x, size_t N, size_t *out_len)
+// {
+//     // Find next power of 2
+//     size_t M = next_pow2(N);
+//     // Allocate real/imag arrays of length M, initialize with zeros
+//     double *r = (double *)calloc(M, sizeof(double));
+//     double *im = (double *)calloc(M, sizeof(double));
+//     if (!r || !im)
+//     {
+//         fprintf(stderr, "Error: calloc failed in FFT prep\n");
+//         exit(1);
+//     }
+//     // Copy x into r[0..N-1]
+//     for (size_t i = 0; i < N; i++)
+//     {
+//         r[i] = x[i];
+//     }
+//     // FFT in‐place on (r,im)
+//     fft_rec(r, im, M);
+//     // We want one‐sided magnitude: indices 0..M/2-1
+//     size_t Nout = M / 2;
+//     double *mag = (double *)malloc(sizeof(double) * Nout);
+//     if (!mag)
+//     {
+//         fprintf(stderr, "Error: malloc failed\n");
+//         exit(1);
+//     }
+//     for (size_t k = 0; k < Nout; k++)
+//     {
+//         mag[k] = sqrt(r[k] * r[k] + im[k] * im[k]);
+//     }
+//     free(r);
+//     free(im);
+//     *out_len = Nout;
+//     return mag;
+// }
 double *compute_fft_magnitude(const double *x, size_t N, size_t *out_len)
 {
-    // Find next power of 2
-    size_t M = next_pow2(N);
-    // Allocate real/imag arrays of length M, initialize with zeros
-    double *r = (double *)calloc(M, sizeof(double));
-    double *im = (double *)calloc(M, sizeof(double));
-    if (!r || !im)
-    {
-        fprintf(stderr, "Error: calloc failed in FFT prep\n");
-        exit(1);
-    }
-    // Copy x into r[0..N-1]
-    for (size_t i = 0; i < N; i++)
-    {
-        r[i] = x[i];
-    }
-    // FFT in‐place on (r,im)
-    fft_rec(r, im, M);
-    // We want one‐sided magnitude: indices 0..M/2-1
-    size_t Nout = M / 2;
-    double *mag = (double *)malloc(sizeof(double) * Nout);
+    size_t Nhalf = N / 2;
+    double *mag = malloc(sizeof(double) * Nhalf);
     if (!mag)
     {
-        fprintf(stderr, "Error: malloc failed\n");
+        fprintf(stderr, "Error: malloc failed in fft mag\n");
         exit(1);
     }
-    for (size_t k = 0; k < Nout; k++)
+
+    // For each bin k = 0..N/2-1
+    for (size_t k = 0; k < Nhalf; ++k)
     {
-        mag[k] = sqrt(r[k] * r[k] + im[k] * im[k]);
+        double re = 0.0, im = 0.0;
+        // DFT formula X[k] = sum_{n=0..N-1} x[n] * exp(-2πi * k * n / N)
+        for (size_t n = 0; n < N; ++n)
+        {
+            double angle = -2.0 * M_PI * (double)k * (double)n / (double)N;
+            re += x[n] * cos(angle);
+            im += x[n] * sin(angle);
+        }
+        mag[k] = sqrt(re * re + im * im);
     }
-    free(r);
-    free(im);
-    *out_len = Nout;
+
+    *out_len = Nhalf;
     return mag;
 }
 
